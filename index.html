@@ -205,6 +205,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--earth)
 .cart-qty-ctrl{display:flex;align-items:center;gap:6px;}
 .qty-btn{background:var(--cream);border:1.5px solid var(--light-gray);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;font-weight:700;}
 
+
+/* SIGNATURE */
+.sig-canvas{border:1.5px solid var(--light-gray);border-radius:8px;background:#fff;touch-action:none;cursor:crosshair;width:100%;height:150px;}
+.sig-canvas.active{border-color:var(--sand);}
 @media print {
 body > *:not(#print-wrapper) { display: none !important; }
 #print-wrapper { display: block !important; }
@@ -579,6 +583,24 @@ body > *:not(#print-wrapper) { display: none !important; }
     </div>
   </div>
 
+
+  <!-- İMZA -->
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span>✍️ <span>Müşteri İmzası / Customer Signature</span></span>
+      <span class="toggle-icon">▾</span>
+    </div>
+    <div class="card-body single">
+      <div class="field full">
+        <label>İmza / Signature</label>
+        <canvas id="sig-canvas" class="sig-canvas"></canvas>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button type="button" class="btn btn-outline btn-sm" onclick="clearSignature()">🗑 Temizle</button>
+          <span id="sig-status" style="font-size:.75rem;color:var(--gray);display:flex;align-items:center;"></span>
+        </div>
+      </div>
+    </div>
+  </div>
   <div style="display:flex;gap:10px;margin-top:4px;">
     <button class="btn btn-primary" style="flex:1;" onclick="saveClient()">💾 <span id="lbl-save">Kaydet</span></button>
     <button class="btn btn-outline" onclick="closeModal('clientModal')"><span id="lbl-cancel">İptal</span></button>
@@ -1068,6 +1090,15 @@ function openClientModal(clientId = null) {
     addDogForm();
   }
   openModal('clientModal');
+  // İmza alanını başlat
+  setTimeout(() => {
+    initSignature();
+    clearSignature();
+    if(editingClientId) {
+      const c = db.clients.find(x => x.id === editingClientId);
+      if(c && c.signature) loadSignature(c.signature);
+    }
+  }, 100);
 }
 
 function addDogForm(dog = null) {
@@ -1292,6 +1323,7 @@ function saveClient() {
       paid: document.getElementById('f-feePaid').value || '0',
       notes: document.getElementById('f-feeNotes').value || '',
     },
+    signature: getSignatureData(),
     createdAt: new Date().toISOString()
   };
 
@@ -1469,7 +1501,8 @@ function showProfileTab(tab) {
   const el = document.getElementById('profileContent');
 
   if(tab === 'info') {
-    el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;"> ${infoRow('Kayıt No.', c.regNo)} ${infoRow('Klinik', c.clinicName)} ${infoRow('Telefon', c.phone)} ${infoRow('E-posta', c.email)} ${infoRow('TC No', c.tcNo)} ${infoRow('Meslek', c.job)} ${infoRow('Giriş', c.entryDate)} ${infoRow('Çıkış (Tahmini)', c.approxExit)} ${infoRow('Çıkış', c.exitDate)} </div> ${c.address ?`<div class="field"><label>Adres</label><div style="font-size:.88rem;padding:8px 10px;background:var(--cream);border-radius:8px;">${c.address}</div></div>`: ''} ${c.serviceTypes?.length ?`<div style="margin-top:10px;"><label style="font-size:.78rem;font-weight:600;color:var(--bark);">HİZMET TÜRLERİ</label><div class="client-dogs" style="margin-top:6px;">${c.serviceTypes.map(s=>`<span class="dog-chip">${s}</span>`).join('')}</div></div>`: ''} ${renderCariHesap(c)}`;
+    el.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;"> ${infoRow('Kayıt No.', c.regNo)} ${infoRow('Klinik', c.clinicName)} ${infoRow('Telefon', c.phone)} ${infoRow('E-posta', c.email)} ${infoRow('TC No', c.tcNo)} ${infoRow('Meslek', c.job)} ${infoRow('Giriş', c.entryDate)} ${infoRow('Çıkış (Tahmini)', c.approxExit)} ${infoRow('Çıkış', c.exitDate)} </div> ${c.address ?`<div class="field"><label>Adres</label><div style="font-size:.88rem;padding:8px 10px;background:var(--cream);border-radius:8px;">${c.address}</div></div>`: ''}
+    ${c.signature ?`<div style="margin-top:10px;"><label style="font-size:.78rem;font-weight:600;color:var(--bark);text-transform:uppercase;">✍️ İMZA</label><div style="background:#fff;border:1.5px solid var(--light-gray);border-radius:8px;padding:8px;margin-top:6px;text-align:center;"><img src="${c.signature}" style="max-width:100%;max-height:120px;"></div></div>`: ''} ${c.serviceTypes?.length ?`<div style="margin-top:10px;"><label style="font-size:.78rem;font-weight:600;color:var(--bark);">HİZMET TÜRLERİ</label><div class="client-dogs" style="margin-top:6px;">${c.serviceTypes.map(s=>`<span class="dog-chip">${s}</span>`).join('')}</div></div>`: ''} ${renderCariHesap(c)}`;
   } else if(tab === 'dogs') {
     if(!c.dogs?.length) { el.innerHTML = '<div class="empty-state"><div class="icon">🐶</div><p>Köpek kaydı yok.</p></div>'; return; }
     el.innerHTML = c.dogs.map((d,i) => `<div class="dog-card"> <div class="dog-card-header"> <div><div class="dog-name">${d.name||'İsimsiz'}</div><div class="dog-breed">${d.breed||'—'} · ${d.age||'?'} · ${d.sex||''}</div></div> </div> <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.83rem;"> ${d.condition ?`<div><strong>Kondüsyon:</strong> ${d.condition}</div>`: ''} ${d.character ?`<div><strong>Mizaç:</strong> ${d.character}</div>`: ''} ${d.food ?`<div style="grid-column:1/-1"><strong>Mama:</strong> ${d.food}</div>`: ''} ${d.vaccine ?`<div style="grid-column:1/-1"><strong>Aşı:</strong> ${d.vaccine}</div>`: ''} ${d.endo ?`<div><strong>İç Parazit:</strong> ${d.endo}</div>`: ''} ${d.ecto ?`<div><strong>Dış Parazit:</strong> ${d.ecto}</div>`: ''} ${d.allergy ?`<div style="grid-column:1/-1"><strong>Alerji:</strong> ${d.allergy}</div>`: ''} ${d.healthNotes ?`<div style="grid-column:1/-1"><strong>Sağlık:</strong> ${d.healthNotes}</div>`: ''} </div> ${(d.vetName||d.vetAddress||d.vetPhone) ?`
@@ -2110,6 +2143,132 @@ function deleteKasaEntry(id) {
 }
 
 
+
+
+// ===================== İMZA / SIGNATURE =====================
+let sigCanvas = null;
+let sigCtx = null;
+let isDrawing = false;
+let hasSigned = false;
+let lastX = 0;
+let lastY = 0;
+
+function initSignature() {
+  sigCanvas = document.getElementById('sig-canvas');
+  if(!sigCanvas) return;
+  sigCtx = sigCanvas.getContext('2d');
+  
+  // Set canvas actual size for sharp drawing
+  function resizeCanvas() {
+    const rect = sigCanvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    sigCanvas.width = rect.width * dpr;
+    sigCanvas.height = rect.height * dpr;
+    sigCtx.scale(dpr, dpr);
+    sigCtx.strokeStyle = '#0f1b2d';
+    sigCtx.lineWidth = 2.5;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+  }
+  resizeCanvas();
+  
+  // Mouse events
+  sigCanvas.addEventListener('mousedown', sigStart);
+  sigCanvas.addEventListener('mousemove', sigMove);
+  sigCanvas.addEventListener('mouseup', sigEnd);
+  sigCanvas.addEventListener('mouseleave', sigEnd);
+  
+  // Touch events (iPad, phone)
+  sigCanvas.addEventListener('touchstart', sigTouchStart, {passive: false});
+  sigCanvas.addEventListener('touchmove', sigTouchMove, {passive: false});
+  sigCanvas.addEventListener('touchend', sigEnd);
+}
+
+function getCanvasPos(e) {
+  const rect = sigCanvas.getBoundingClientRect();
+  return {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  };
+}
+
+function sigStart(e) {
+  isDrawing = true;
+  const pos = getCanvasPos(e);
+  lastX = pos.x;
+  lastY = pos.y;
+  sigCanvas.classList.add('active');
+}
+
+function sigMove(e) {
+  if(!isDrawing) return;
+  const pos = getCanvasPos(e);
+  sigCtx.beginPath();
+  sigCtx.moveTo(lastX, lastY);
+  sigCtx.lineTo(pos.x, pos.y);
+  sigCtx.stroke();
+  lastX = pos.x;
+  lastY = pos.y;
+  hasSigned = true;
+  document.getElementById('sig-status').textContent = '✅ İmza atıldı';
+}
+
+function sigEnd() {
+  isDrawing = false;
+  sigCanvas.classList.remove('active');
+}
+
+function sigTouchStart(e) {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = sigCanvas.getBoundingClientRect();
+  isDrawing = true;
+  lastX = touch.clientX - rect.left;
+  lastY = touch.clientY - rect.top;
+  sigCanvas.classList.add('active');
+}
+
+function sigTouchMove(e) {
+  e.preventDefault();
+  if(!isDrawing) return;
+  const touch = e.touches[0];
+  const rect = sigCanvas.getBoundingClientRect();
+  const x = touch.clientX - rect.left;
+  const y = touch.clientY - rect.top;
+  sigCtx.beginPath();
+  sigCtx.moveTo(lastX, lastY);
+  sigCtx.lineTo(x, y);
+  sigCtx.stroke();
+  lastX = x;
+  lastY = y;
+  hasSigned = true;
+  document.getElementById('sig-status').textContent = '✅ İmza atıldı';
+}
+
+function clearSignature() {
+  if(!sigCanvas || !sigCtx) return;
+  const dpr = window.devicePixelRatio || 1;
+  sigCtx.clearRect(0, 0, sigCanvas.width / dpr, sigCanvas.height / dpr);
+  hasSigned = false;
+  document.getElementById('sig-status').textContent = '';
+}
+
+function getSignatureData() {
+  if(!sigCanvas || !hasSigned) return '';
+  return sigCanvas.toDataURL('image/png');
+}
+
+function loadSignature(dataUrl) {
+  if(!dataUrl || !sigCanvas || !sigCtx) return;
+  const img = new Image();
+  img.onload = function() {
+    const dpr = window.devicePixelRatio || 1;
+    sigCtx.drawImage(img, 0, 0, sigCanvas.width / dpr, sigCanvas.height / dpr);
+    hasSigned = true;
+    document.getElementById('sig-status').textContent = '✅ İmza mevcut';
+  };
+  img.src = dataUrl;
+}
 
 // ===================== CARİ HESAP & ÖDEME =====================
 function getClientBalance(clientId) {
